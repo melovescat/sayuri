@@ -3,47 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Emoji Sound Generator (Phonetic)</title>
+    <title>AI Emoji Sound Generator For Yuna (Combined Phonetics)</title>
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Load Firebase SDKs -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // Global variables are assumed to be available in the Canvas environment
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? initialAuthToken : null;
-
-        if (firebaseConfig) {
-            setLogLevel('debug'); // Enable debug logging for Firebase
-            const app = initializeApp(firebaseConfig);
-            window.db = getFirestore(app);
-            window.auth = getAuth(app);
-
-            // Authentication logic
-            onAuthStateChanged(window.auth, async (user) => {
-                if (!user) {
-                    try {
-                        if (initialAuthToken) {
-                            await signInWithCustomToken(window.auth, initialAuthToken);
-                            console.log("Firebase signed in with custom token.");
-                        } else {
-                            await signInAnonymously(window.auth);
-                            console.log("Firebase signed in anonymously.");
-                        }
-                    } catch (error) {
-                        console.error("Firebase Auth Error:", error);
-                    }
-                }
-                document.getElementById('app-status').textContent = 'Ready';
-            });
-        } else {
-            document.getElementById('app-status').textContent = 'Firebase Config Missing. App may not function.';
-        }
-    </script>
     <style>
         /* Custom styles for mobile responsiveness and aesthetics */
         :root {
@@ -111,18 +73,17 @@
 
     <div class="main-container">
         <div class="card space-y-6">
-            <h1 class="text-3xl font-bold text-center text-gray-800">🎶 AI Phonetic Sound Maker</h1>
-            <p class="text-center text-gray-500">Enter any single emoji. AI generates a short, phonetic sound (e.g., 🥁 → "ta ta ta tum").</p>
+            <h1 class="text-3xl font-bold text-center text-gray-800">🎶 AI Emoji Sound For Yuna :3</h1>
+            <p class="text-center text-gray-500">Enter a sequence of 1 to 10 emojis (e.g., 🚀💥🐶). AI creates a combined sound effect!</p>
 
             <!-- Input Field -->
             <div>
                 <input
                     type="text"
                     id="emoji-input"
-                    maxlength="2"
-                    placeholder="✨"
+                    maxlength="20" 
+                    placeholder="✨💣😭"
                     class="input-box w-full p-4 rounded-xl shadow-inner"
-                    oninput="this.value = this.value.slice(0, 2).trim()"
                 />
             </div>
 
@@ -132,18 +93,16 @@
                 onclick="handleGenerateClick()"
                 class="button-primary w-full text-white font-semibold py-3 rounded-xl flex items-center justify-center shadow-lg hover:shadow-xl transition"
             >
-                <span id="button-text">Generate Phonetic Sound</span>
+                <span id="button-text">Generate Combined Sound</span>
                 <div id="loader" class="loader-ring hidden ml-3"></div>
             </button>
 
             <!-- Status and Audio Player -->
             <div id="status-container" class="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
                 <p class="text-sm font-medium text-gray-700">Status:</p>
-                <p id="message" class="text-base text-gray-600">Waiting for an emoji...</p>
+                <p id="message" class="text-base text-gray-600">App ready. Enter emojis!</p>
                 <audio id="audio-player" class="w-full mt-3 hidden" controls></audio>
             </div>
-            
-            <p id="app-status" class="text-xs text-gray-400 text-center mt-4">Initializing...</p>
         </div>
     </div>
 
@@ -248,14 +207,14 @@
         // --- Core LLM Functions ---
 
         /**
-         * Uses Gemini Flash to determine the phonetic sound for the emoji.
-         * @param {string} emoji The single emoji character.
-         * @returns {Promise<string>} A short, phonetic phrase (e.g., "ta ta ta tum").
+         * Uses Gemini Flash to determine the combined phonetic sound for the emoji sequence.
+         * @param {string} emojiSequence The sequence of emoji characters (1-10 emojis).
+         * @returns {Promise<string>} A combined, phonetic phrase (max 50 characters).
          */
-        async function getEmojiSoundPhonetics(emoji) {
-            // New system prompt focused purely on phonetic, onomatopoeic representation
-            const systemPrompt = "You are a sound effects expert. Your only output must be a short, phonetic, onomatopoeic phrase (4 words maximum) that describes the sound the provided emoji represents. This phrase must be suitable for Text-to-Speech generation and should create a sound effect, not just a name. Do not include any punctuation or commentary. Example: for '🥁' output 'ta ta ta tum'. For '💥' output 'Boom shhh'. For '🐶' output 'Woof woof'.";
-            const userQuery = `What is the phonetic sound phrase for this emoji: ${emoji}`;
+        async function getEmojiSoundPhonetics(emojiSequence) {
+            // New System Prompt emphasizes VOCAL IMITATION/PERFORMANCE, not description.
+            const systemPrompt = "You are a vocal sound effects artist. The user provides an emoji sequence. Your *only* output must be a single, short sequence of human phonetic sounds that imitates the collective, characteristic sound or sounds of the emojis provided. The sounds must be suitable for Text-to-Speech (TTS) synthesis and should resemble actual noises, not words. Maximum 50 characters. Do not use punctuation or commentary. Example: for '💥' output 'BOOOM-SHHHH'. For '😩😭' output 'Auuuugh-waaaah-meow'.";
+            const userQuery = `Generate the phonetic sound phrase for this emoji sequence: ${emojiSequence}`;
 
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_FLASH_MODEL}:generateContent?key=${API_KEY}`;
             
@@ -274,14 +233,14 @@
             const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
 
             if (text) {
-                // Sanitize and limit the text for the best TTS result
-                const sanitizedText = text.trim().replace(/[^a-zA-Z\s]/g, '').slice(0, 30); 
+                // Sanitize and limit the text for the best TTS result (increased to 50 for complexity)
+                const sanitizedText = text.trim().replace(/[^a-zA-Z\s\-]/g, '').slice(0, 50); 
                 if (sanitizedText.length === 0) {
                      throw new Error("AI returned an empty or unreadable sound phrase.");
                 }
                 return sanitizedText;
             } else {
-                throw new Error("Could not determine the emoji's sound phrase. Received unexpected response.");
+                throw new Error("Could not determine the emoji's combined sound phrase. Received unexpected response.");
             }
         }
 
@@ -292,9 +251,6 @@
          */
         async function getTTSAudio(phoneticSound) {
             const prompt = phoneticSound; 
-            
-            // Simplified TTS Request: Removed system instruction and switched to stable voice.
-
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TTS_MODEL}:generateContent?key=${API_KEY}`;
             
             const payload = {
@@ -341,29 +297,36 @@
         // --- Main Controller ---
 
         async function handleGenerateClick() {
-            const emoji = input.value.trim();
+            // Simple validation for input (checks if input is mostly emojis or a short sequence)
+            const inputString = input.value.trim();
+            const emojiRegex = /(\u00a9|\u00ae|[\u2000-\u3300]|\ud83c[\ud000-\udfff]|\ud83d[\ud000-\udfff]|\ud83e[\ud000-\udfff])/g;
+            const emojis = inputString.match(emojiRegex);
+            
             audioPlayer.classList.add('hidden');
             audioPlayer.removeAttribute('src');
 
-            if (!emoji) {
-                messageDisplay.textContent = "Please enter a single emoji first.";
+            if (!emojis || emojis.length === 0 || emojis.length > 10) {
+                messageDisplay.textContent = "Please enter 1 to 10 emojis only.";
                 return;
             }
+
+            // The actual string we send to the AI is the raw input
+            const emojiSequence = inputString;
 
             // Set UI to loading state
             button.disabled = true;
             document.getElementById('button-text').textContent = 'Generating...';
             loader.classList.remove('hidden');
-            messageDisplay.textContent = `Analyzing sound for: ${emoji}`;
+            messageDisplay.textContent = `Analyzing sequence of ${emojis.length} emojis...`;
 
             try {
-                // 1. Get Emoji Sound Phonetics
-                messageDisplay.textContent = `1/2: Asking AI for the phonetic sound phrase for ${emoji}...`;
-                const phoneticSound = await getEmojiSoundPhonetics(emoji);
-                messageDisplay.textContent = `Phonetic sound identified: "${phoneticSound}".`;
+                // 1. Get Combined Phonetics (The sound "script")
+                messageDisplay.textContent = `1/2: Asking AI for the sound imitation script for ${emojiSequence}...`;
+                const phoneticSound = await getEmojiSoundPhonetics(emojiSequence);
+                messageDisplay.textContent = `Imitation script created: "${phoneticSound}".`;
                 
-                // 2. Generate Sound
-                messageDisplay.textContent = `2/2: Generating the audio for "${phoneticSound}"... (max 3 seconds)`;
+                // 2. Generate Sound (The performance)
+                messageDisplay.textContent = `2/2: Generating the audio performance for "${phoneticSound}"... (max 3 seconds)`;
                 const audioBlob = await getTTSAudio(phoneticSound);
 
                 // 3. Play Audio
@@ -372,20 +335,20 @@
                 audioPlayer.classList.remove('hidden');
                 audioPlayer.play();
                 
-                messageDisplay.textContent = `Success! Generated sound effect: "${phoneticSound}". Click play or try a new emoji!`;
+                messageDisplay.textContent = `Success! Generated sound: "${phoneticSound}". Click play or try a new sequence!`;
 
             } catch (error) {
                 console.error("Generation Error:", error);
                 
-                let userMessage = `Error: Failed to generate sound. ${error.message}. Please try a different emoji.`;
+                let userMessage = `Error: Failed to generate sound. ${error.message}. Please try again.`;
 
                 // Custom message for common API Errors
                 if (error.message.includes("status: 401")) {
-                     userMessage = `Authentication Error (Status 401): The system could not authenticate the API key. Please try submitting again.`;
+                     userMessage = `Authentication Error (Status 401): The provided API key could not authenticate. Please ensure the key is valid.`;
                 } else if (error.message.includes("status: 403")) {
-                     userMessage = `Authorization Error (Status 403 - Permission Denied): The API key is not authorized for this service. Please check your key's restrictions in Google AI Studio.`;
+                     userMessage = `Authorization Error (Status 403 - Permission Denied): The API key is not authorized for this service. Check the key's restrictions in Google AI Studio.`;
                 } else if (error.message.includes("status: 500")) {
-                    userMessage = `Internal Server Error (Status 500): The API service experienced an unexpected failure. This is often temporary. Please wait a minute or two and retry, or try a different emoji.`;
+                    userMessage = `Internal Server Error (Status 500): The API service experienced an unexpected failure. This is often temporary. Please wait a minute or two and retry, or try a simpler sequence.`;
                 }
 
                 messageDisplay.textContent = userMessage;
@@ -393,7 +356,7 @@
             } finally {
                 // Reset UI state
                 button.disabled = false;
-                document.getElementById('button-text').textContent = 'Generate Phonetic Sound';
+                document.getElementById('button-text').textContent = 'Generate Combined Sound';
                 loader.classList.add('hidden');
             }
         }
