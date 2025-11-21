@@ -15,7 +15,7 @@
         // Global variables are assumed to be available in the Canvas environment
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? initialAuthToken : null;
 
         if (firebaseConfig) {
             setLogLevel('debug'); // Enable debug logging for Firebase
@@ -148,7 +148,8 @@
     </div>
 
     <script>
-        const API_KEY = "AIzaSyA-VMpJ9FrfuWmmVaaLODDALvQUXO2AUXs"; // Kept empty, assumed to be provided by the environment
+        // WARNING: This key is hardcoded. If you host this file publicly (e.g., on GitHub), your key will be exposed!
+        const API_KEY = "AIzaSyA-VMpJ9FrfuWmmVaaLODDALvQUXO2AUXs"; 
         const GEMINI_FLASH_MODEL = "gemini-2.5-flash-preview-09-2025";
         const GEMINI_TTS_MODEL = "gemini-2.5-flash-preview-tts";
 
@@ -291,19 +292,18 @@
          */
         async function getTTSAudio(phoneticSound) {
             const prompt = phoneticSound; 
-            // Guiding the TTS model to deliver the text as a sound effect, not just a plain sentence.
-            const systemInstruction = "Say the following text in a cheerful, energetic, and sound-effect-like manner. The total duration must be under 3 seconds. Use appropriate pauses to simulate a distinct sound effect.";
+            
+            // Simplified TTS Request: Removed system instruction and switched to stable voice.
 
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TTS_MODEL}:generateContent?key=${API_KEY}`;
             
             const payload = {
                 contents: [{ parts: [{ text: prompt }] }],
-                systemInstruction: { parts: [{ text: systemInstruction }] },
                 generationConfig: {
                     responseModalities: ["AUDIO"],
                     speechConfig: {
                         voiceConfig: {
-                            prebuiltVoiceConfig: { voiceName: "Puck" } // Upbeat voice selected
+                            prebuiltVoiceConfig: { voiceName: "Kore" } // Stable Voice
                         }
                     }
                 },
@@ -379,9 +379,13 @@
                 
                 let userMessage = `Error: Failed to generate sound. ${error.message}. Please try a different emoji.`;
 
-                // Custom message for the 401 Authentication Error you saw
+                // Custom message for common API Errors
                 if (error.message.includes("status: 401")) {
-                     userMessage = `Authentication Error (Status 401): The request failed because the system could not authenticate the API call. Please try submitting again, as this is usually a temporary environmental issue.`;
+                     userMessage = `Authentication Error (Status 401): The system could not authenticate the API key. Please try submitting again.`;
+                } else if (error.message.includes("status: 403")) {
+                     userMessage = `Authorization Error (Status 403 - Permission Denied): The API key is not authorized for this service. Please check your key's restrictions in Google AI Studio.`;
+                } else if (error.message.includes("status: 500")) {
+                    userMessage = `Internal Server Error (Status 500): The API service experienced an unexpected failure. This is often temporary. Please wait a minute or two and retry, or try a different emoji.`;
                 }
 
                 messageDisplay.textContent = userMessage;
