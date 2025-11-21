@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Emoji Sound Generator (Phonetic)</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global variables are assumed to be available in the Canvas environment
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        if (firebaseConfig) {
+            setLogLevel('debug'); // Enable debug logging for Firebase
+            const app = initializeApp(firebaseConfig);
+            window.db = getFirestore(app);
+            window.auth = getAuth(app);
+
+            // Authentication logic
+            onAuthStateChanged(window.auth, async (user) => {
+                if (!user) {
+                    try {
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(window.auth, initialAuthToken);
+                            console.log("Firebase signed in with custom token.");
+                        } else {
+                            await signInAnonymously(window.auth);
+                            console.log("Firebase signed in anonymously.");
+                        }
+                    } catch (error) {
+                        console.error("Firebase Auth Error:", error);
+                    }
+                }
+                document.getElementById('app-status').textContent = 'Ready';
+            });
+        } else {
+            document.getElementById('app-status').textContent = 'Firebase Config Missing. App may not function.';
+        }
+    </script>
+    <style>
+        /* Custom styles for mobile responsiveness and aesthetics */
+        :root {
+            --primary-color: #10b981; /* Emerald 500 */
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        .main-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+        .card {
+            background-color: white;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            max-width: 480px;
+            width: 100%;
+            padding: 2rem;
+            border-radius: 1.5rem;
+            transition: transform 0.3s ease;
+        }
+        .input-box {
+            font-size: 2.5rem;
+            text-align: center;
+            border: 2px solid #e5e7eb;
+            transition: border-color 0.3s;
+        }
+        .input-box:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+        .button-primary {
+            background-color: var(--primary-color);
+            transition: background-color 0.2s, transform 0.1s;
+        }
+        .button-primary:hover:not(:disabled) {
+            background-color: #059669;
+        }
+        .button-primary:active:not(:disabled) {
+            transform: scale(0.98);
+        }
+        .button-primary:disabled {
+            background-color: #d1d5db;
+            cursor: not-allowed;
+        }
+        .loader-ring {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--primary-color);
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <div class="main-container">
+        <div class="card space-y-6">
+            <h1 class="text-3xl font-bold text-center text-gray-800">🎶 AI Phonetic Sound Maker</h1>
+            <p class="text-center text-gray-500">Enter any single emoji. AI generates a short, phonetic sound (e.g., 🥁 → "ta ta ta tum").</p>
+
+            <!-- Input Field -->
+            <div>
+                <input
+                    type="text"
+                    id="emoji-input"
+                    maxlength="2"
+                    placeholder="✨"
+                    class="input-box w-full p-4 rounded-xl shadow-inner"
+                    oninput="this.value = this.value.slice(0, 2).trim()"
+                />
+            </div>
+
+            <!-- Action Button -->
+            <button
+                id="generate-button"
+                onclick="handleGenerateClick()"
+                class="button-primary w-full text-white font-semibold py-3 rounded-xl flex items-center justify-center shadow-lg hover:shadow-xl transition"
+            >
+                <span id="button-text">Generate Phonetic Sound</span>
+                <div id="loader" class="loader-ring hidden ml-3"></div>
+            </button>
+
+            <!-- Status and Audio Player -->
+            <div id="status-container" class="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <p class="text-sm font-medium text-gray-700">Status:</p>
+                <p id="message" class="text-base text-gray-600">Waiting for an emoji...</p>
+                <audio id="audio-player" class="w-full mt-3 hidden" controls></audio>
+            </div>
+            
+            <p id="app-status" class="text-xs text-gray-400 text-center mt-4">Initializing...</p>
+        </div>
+    </div>
+
+    <script>
+        const API_KEY = ""; // Kept empty, assumed to be provided by the environment
+        const GEMINI_FLASH_MODEL = "gemini-2.5-flash-preview-09-2025";
+        const GEMINI_TTS_MODEL = "gemini-2.5-flash-preview-tts";
+
+        const input = document.getElementById('emoji-input');
+        const button = document.getElementById('generate-button');
+        const messageDisplay = document.getElementById('message');
+        const loader = document.getElementById('loader');
+        const audioPlayer = document.getElementById('audio-player');
+
+        // --- Utility Functions for Audio Conversion (PCM to WAV) ---
+
+        // Converts Base64 string to ArrayBuffer
+        function base64ToArrayBuffer(base64) {
+            const binaryString = atob(base64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        // Writes the RIFF header for a WAV file
+        function writeString(view, offset, str) {
+            for (let i = 0; i < str.length; i++) {
+                view.setUint8(offset + i, str.charCodeAt(i));
+            }
+        }
+
+        // Converts PCM 16-bit data to a WAV Blob
+        function pcmToWav(pcm16, sampleRate) {
+            const numChannels = 1;
+            const bytesPerSample = 2; // 16-bit PCM
+            const blockAlign = numChannels * bytesPerSample;
+            const byteRate = sampleRate * blockAlign;
+            const dataSize = pcm16.length * bytesPerSample;
+            const buffer = new ArrayBuffer(44 + dataSize); // 44-byte WAV header + data
+
+            const view = new DataView(buffer);
+
+            // RIFF chunk descriptor
+            writeString(view, 0, 'RIFF'); // Chunk ID
+            view.setUint32(4, 36 + dataSize, true); // Chunk Size
+            writeString(view, 8, 'WAVE'); // Format
+
+            // FMT sub-chunk
+            writeString(view, 12, 'fmt '); // Sub-chunk 1 ID
+            view.setUint32(16, 16, true); // Sub-chunk 1 Size (16 for PCM)
+            view.setUint16(20, 1, true); // Audio Format (1 for PCM)
+            view.setUint16(22, numChannels, true); // Num Channels
+            view.setUint32(24, sampleRate, true); // Sample Rate
+            view.setUint32(28, byteRate, true); // Byte Rate
+            view.setUint16(32, blockAlign, true); // Block Align
+            view.setUint16(34, 16, true); // Bits Per Sample (16-bit)
+
+            // DATA sub-chunk
+            writeString(view, 36, 'data'); // Sub-chunk 2 ID
+            view.setUint32(40, dataSize, true); // Sub-chunk 2 Size
+
+            // Write PCM data
+            let offset = 44;
+            for (let i = 0; i < pcm16.length; i++) {
+                view.setInt16(offset, pcm16[i], true);
+                offset += 2;
+            }
+
+            return new Blob([buffer], { type: 'audio/wav' });
+        }
+
+        // --- API Helpers with Exponential Backoff ---
+
+        async function fetchWithRetries(url, options, retries = 3) {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    
+                    if (response.status === 429 && i < retries - 1) {
+                        const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        continue;
+                    }
+                    if (!response.ok) {
+                        const errorBody = await response.text();
+                        // Throw detailed error including status and body for clearer user feedback
+                        throw new Error(`HTTP error! status: ${response.status}. Body: ${errorBody}`);
+                    }
+                    return response;
+                } catch (error) {
+                    if (i === retries - 1) {
+                        throw error;
+                    }
+                }
+            }
+        }
+
+        // --- Core LLM Functions ---
+
+        /**
+         * Uses Gemini Flash to determine the phonetic sound for the emoji.
+         * @param {string} emoji The single emoji character.
+         * @returns {Promise<string>} A short, phonetic phrase (e.g., "ta ta ta tum").
+         */
+        async function getEmojiSoundPhonetics(emoji) {
+            // New system prompt focused purely on phonetic, onomatopoeic representation
+            const systemPrompt = "You are a sound effects expert. Your only output must be a short, phonetic, onomatopoeic phrase (4 words maximum) that describes the sound the provided emoji represents. This phrase must be suitable for Text-to-Speech generation and should create a sound effect, not just a name. Do not include any punctuation or commentary. Example: for '🥁' output 'ta ta ta tum'. For '💥' output 'Boom shhh'. For '🐶' output 'Woof woof'.";
+            const userQuery = `What is the phonetic sound phrase for this emoji: ${emoji}`;
+
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_FLASH_MODEL}:generateContent?key=${API_KEY}`;
+            
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                systemInstruction: { parts: [{ text: systemPrompt }] },
+            };
+
+            const response = await fetchWithRetries(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.json();
+            const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+
+            if (text) {
+                // Sanitize and limit the text for the best TTS result
+                const sanitizedText = text.trim().replace(/[^a-zA-Z\s]/g, '').slice(0, 30); 
+                if (sanitizedText.length === 0) {
+                     throw new Error("AI returned an empty or unreadable sound phrase.");
+                }
+                return sanitizedText;
+            } else {
+                throw new Error("Could not determine the emoji's sound phrase. Received unexpected response.");
+            }
+        }
+
+        /**
+         * Uses Gemini TTS to generate a short audio clip based on the phonetic sound.
+         * @param {string} phoneticSound The phonetic sound phrase (e.g., "ta ta ta tum").
+         * @returns {Promise<Blob>} A Blob containing the WAV audio data.
+         */
+        async function getTTSAudio(phoneticSound) {
+            const prompt = phoneticSound; 
+            // Guiding the TTS model to deliver the text as a sound effect, not just a plain sentence.
+            const systemInstruction = "Say the following text in a cheerful, energetic, and sound-effect-like manner. The total duration must be under 3 seconds. Use appropriate pauses to simulate a distinct sound effect.";
+
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TTS_MODEL}:generateContent?key=${API_KEY}`;
+            
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }],
+                systemInstruction: { parts: [{ text: systemInstruction }] },
+                generationConfig: {
+                    responseModalities: ["AUDIO"],
+                    speechConfig: {
+                        voiceConfig: {
+                            prebuiltVoiceConfig: { voiceName: "Puck" } // Upbeat voice selected
+                        }
+                    }
+                },
+                model: GEMINI_TTS_MODEL
+            };
+
+            const response = await fetchWithRetries(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.json();
+            const part = result.candidates?.[0]?.content?.parts?.[0];
+            const audioData = part?.inlineData?.data;
+            const mimeType = part?.inlineData?.mimeType;
+
+            if (audioData && mimeType && mimeType.startsWith("audio/L16")) {
+                // Extract sample rate from MIME type (e.g., audio/L16; rate=24000)
+                const rateMatch = mimeType.match(/rate=(\d+)/);
+                const sampleRate = rateMatch ? parseInt(rateMatch[1], 10) : 24000; 
+
+                const pcmData = base64ToArrayBuffer(audioData);
+                // API returns signed PCM16 audio data.
+                const pcm16 = new Int16Array(pcmData);
+                
+                return pcmToWav(pcm16, sampleRate);
+
+            } else {
+                console.error("TTS API Response:", JSON.stringify(result, null, 2));
+                throw new Error("TTS audio generation failed or returned invalid data format.");
+            }
+        }
+
+        // --- Main Controller ---
+
+        async function handleGenerateClick() {
+            const emoji = input.value.trim();
+            audioPlayer.classList.add('hidden');
+            audioPlayer.removeAttribute('src');
+
+            if (!emoji) {
+                messageDisplay.textContent = "Please enter a single emoji first.";
+                return;
+            }
+
+            // Set UI to loading state
+            button.disabled = true;
+            document.getElementById('button-text').textContent = 'Generating...';
+            loader.classList.remove('hidden');
+            messageDisplay.textContent = `Analyzing sound for: ${emoji}`;
+
+            try {
+                // 1. Get Emoji Sound Phonetics
+                messageDisplay.textContent = `1/2: Asking AI for the phonetic sound phrase for ${emoji}...`;
+                const phoneticSound = await getEmojiSoundPhonetics(emoji);
+                messageDisplay.textContent = `Phonetic sound identified: "${phoneticSound}".`;
+                
+                // 2. Generate Sound
+                messageDisplay.textContent = `2/2: Generating the audio for "${phoneticSound}"... (max 3 seconds)`;
+                const audioBlob = await getTTSAudio(phoneticSound);
+
+                // 3. Play Audio
+                const audioUrl = URL.createObjectURL(audioBlob);
+                audioPlayer.src = audioUrl;
+                audioPlayer.classList.remove('hidden');
+                audioPlayer.play();
+                
+                messageDisplay.textContent = `Success! Generated sound effect: "${phoneticSound}". Click play or try a new emoji!`;
+
+            } catch (error) {
+                console.error("Generation Error:", error);
+                
+                let userMessage = `Error: Failed to generate sound. ${error.message}. Please try a different emoji.`;
+
+                // Custom message for the 401 Authentication Error you saw
+                if (error.message.includes("status: 401")) {
+                     userMessage = `Authentication Error (Status 401): The request failed because the system could not authenticate the API call. Please try submitting again, as this is usually a temporary environmental issue.`;
+                }
+
+                messageDisplay.textContent = userMessage;
+
+            } finally {
+                // Reset UI state
+                button.disabled = false;
+                document.getElementById('button-text').textContent = 'Generate Phonetic Sound';
+                loader.classList.add('hidden');
+            }
+        }
+    </script>
+</body>
+</html>
+
